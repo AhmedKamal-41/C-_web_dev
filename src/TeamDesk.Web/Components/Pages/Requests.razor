@@ -1,0 +1,276 @@
+@page "/"
+@page "/requests"
+@rendermode InteractiveServer
+@using TeamDesk.Web.Models
+@using TeamDesk.Web.Services
+@inject RequestApiService RequestApi
+
+<PageTitle>TeamDesk Requests</PageTitle>
+
+<header class="app-header">
+    <div class="app-header-inner">
+        <div class="app-logo">TD</div>
+        <div>
+            <h1>TeamDesk</h1>
+            <p>Submit and track equipment, software, and purchase requests</p>
+        </div>
+    </div>
+</header>
+
+<main class="page">
+    @if (errorMessage != null)
+    {
+        <p class="message error">@errorMessage</p>
+    }
+
+    @if (successMessage != null)
+    {
+        <p class="message success">@successMessage</p>
+    }
+
+    <div class="layout">
+        <section class="card">
+            <div class="card-header">
+                <div>
+                    <h2>New request</h2>
+                    <p class="card-subtitle">New requests start as Pending.</p>
+                </div>
+            </div>
+
+            <div class="field">
+                <label for="title">Title</label>
+                <input id="title" type="text" placeholder="e.g. Laptop stand" @bind="newTitle" />
+            </div>
+
+            <div class="field">
+                <label for="description">Description</label>
+                <textarea id="description" rows="3" placeholder="What is it for?" @bind="newDescription"></textarea>
+            </div>
+
+            <div class="field">
+                <label for="category">Category</label>
+                <select id="category" @bind="newCategory">
+                    <option value="">-- Choose a category --</option>
+                    <option value="Equipment">Equipment</option>
+                    <option value="Software">Software</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label for="cost">Estimated cost</label>
+                <input id="cost" type="number" step="0.01" @bind="newEstimatedCost" />
+            </div>
+
+            <button type="button" class="button-primary" @onclick="CreateRequestAsync" disabled="@(isBusy || isLoading)">Create Request</button>
+        </section>
+
+        <section class="card">
+            <div class="card-header">
+                <div>
+                    <h2>Requests</h2>
+                    @if (listLoaded)
+                    {
+                        <p class="card-subtitle">@requests.Count total</p>
+                    }
+                </div>
+                <button type="button" class="button-secondary" @onclick="RefreshRequestsAsync" disabled="@(isBusy || isLoading)">Refresh</button>
+            </div>
+
+            @if (isLoading)
+            {
+                <p class="list-state">Loading requests...</p>
+            }
+            else if (!listLoaded)
+            {
+                <p class="list-state">The request list is not available.</p>
+            }
+            else if (requests.Count == 0)
+            {
+                <p class="list-state">There are no requests yet.</p>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Id</th>
+                                <th>Title</th>
+                                <th>Category</th>
+                                <th class="cell-cost">Estimated cost</th>
+                                <th>Status</th>
+                                <th class="cell-actions">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (WorkRequest request in requests)
+                            {
+                                <tr>
+                                    <td class="cell-id">@request.Id</td>
+                                    <td class="cell-title">@request.Title</td>
+                                    <td><span class="badge badge-category">@request.Category</span></td>
+                                    <td class="cell-cost">@request.EstimatedCost.ToString("0.00")</td>
+                                    <td><span class="badge @GetStatusClass(request.Status)">@request.Status</span></td>
+                                    <td class="cell-actions">
+                                        <button type="button" class="button-approve" @onclick="() => ApproveRequestAsync(request.Id)" disabled="@(isBusy || isLoading)">Approve</button>
+                                        <button type="button" class="button-reject" @onclick="() => RejectRequestAsync(request.Id)" disabled="@(isBusy || isLoading)">Reject</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    </div>
+</main>
+
+@code {
+    private List<WorkRequest> requests = new List<WorkRequest>();
+    private bool isLoading = false;
+    private bool listLoaded = false;
+    private bool isBusy = false;
+    private string? errorMessage;
+    private string? successMessage;
+
+    private string newTitle = string.Empty;
+    private string newDescription = string.Empty;
+    private string newCategory = string.Empty;
+    private decimal newEstimatedCost = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRequestsAsync();
+    }
+
+    private async Task LoadRequestsAsync()
+    {
+        isLoading = true;
+
+        try
+        {
+            requests = await RequestApi.GetAllAsync();
+            listLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            // Do not show an empty list when loading failed: the data is unknown, not empty.
+            requests = new List<WorkRequest>();
+            listLoaded = false;
+            errorMessage = "Could not load requests. " + ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RefreshRequestsAsync()
+    {
+        errorMessage = null;
+        successMessage = null;
+        await LoadRequestsAsync();
+    }
+
+    private async Task CreateRequestAsync()
+    {
+        errorMessage = null;
+        successMessage = null;
+
+        if (string.IsNullOrWhiteSpace(newTitle))
+        {
+            errorMessage = "Title must not be blank.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(newCategory))
+        {
+            errorMessage = "Please choose a category.";
+            return;
+        }
+
+        if (newEstimatedCost < 0)
+        {
+            errorMessage = "Estimated cost must not be negative.";
+            return;
+        }
+
+        WorkRequest newRequest = new WorkRequest();
+        newRequest.Title = newTitle;
+        newRequest.Description = newDescription;
+        newRequest.Category = newCategory;
+        newRequest.EstimatedCost = newEstimatedCost;
+
+        isBusy = true;
+
+        try
+        {
+            WorkRequest savedRequest = await RequestApi.CreateAsync(newRequest);
+
+            newTitle = string.Empty;
+            newDescription = string.Empty;
+            newCategory = string.Empty;
+            newEstimatedCost = 0;
+
+            await LoadRequestsAsync();
+            successMessage = $"Request {savedRequest.Id} was created.";
+        }
+        catch (Exception ex)
+        {
+            // The inputs are left as they are so the user can try again.
+            errorMessage = "Could not create the request. " + ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    // Picks the CSS class that colours the status badge.
+    private string GetStatusClass(string status)
+    {
+        if (status == "Approved")
+        {
+            return "status-approved";
+        }
+
+        if (status == "Rejected")
+        {
+            return "status-rejected";
+        }
+
+        return "status-pending";
+    }
+
+    private async Task ApproveRequestAsync(int id)
+    {
+        await ChangeStatusAsync(id, "Approved");
+    }
+
+    private async Task RejectRequestAsync(int id)
+    {
+        await ChangeStatusAsync(id, "Rejected");
+    }
+
+    private async Task ChangeStatusAsync(int id, string status)
+    {
+        errorMessage = null;
+        successMessage = null;
+        isBusy = true;
+
+        try
+        {
+            await RequestApi.UpdateStatusAsync(id, status);
+            await LoadRequestsAsync();
+            successMessage = $"Request {id} is now {status}.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Could not change request {id} to {status}. " + ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}
