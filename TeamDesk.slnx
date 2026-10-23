@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TeamDesk.Api/TeamDesk.Api.csproj" />
+    <Project Path="src/TeamDesk.Web/TeamDesk.Web.csproj" />
+  </Folder>
+</Solution>
