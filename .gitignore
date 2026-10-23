@@ -1,0 +1,20 @@
+# Build output
+bin/
+obj/
+
+# IDE and editor files
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Local Claude Code settings
+.claude/
+
+# Local secrets and environment overrides
+appsettings.*.local.json
+.env
+
+# Personal study material, not part of the project
+*.pdf
