@@ -9,8 +9,9 @@ obj/
 *.user
 *.suo
 
-# Local Claude Code settings
+# Local tool settings and notes
 .claude/
+CLAUDE.md
 
 # Local secrets and environment overrides
 appsettings.*.local.json
